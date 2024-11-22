@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual DJ Mixer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 40px;
+            color: #00ff9d;
+            text-shadow: 0 0 10px rgba(0, 255, 157, 0.5);
+        }
+
+        .track {
+            margin: 30px 0;
+            padding: 25px;
+            background: #2a2a2a;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #3a3a3a;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .track.drag-over {
+            border: 2px dashed #00ff9d;
+            background: rgba(0, 255, 157, 0.1);
+        }
+
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .file-upload label {
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #00ff9d, #00ccff);
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .file-upload label:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(0, 255, 157, 0.3);
+        }
+
+        .file-name {
+            color: #888;
+            font-size: 0.9em;
+            margin-left: 10px;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #222;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .slider-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #00ff9d;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 255, 157, 0.5);
+        }
+
+        .visualizer-container {
+            margin: 15px 0;
+            background: #222;
+            border-radius: 10px;
+            padding: 15px;
+            position: relative;
+            height: 100px;
+            overflow: hidden;
+        }
+
+        .visualizer-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .visualizer-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background: linear-gradient(90deg, 
+                rgba(42, 42, 42, 0.8) 0%, 
+                rgba(42, 42, 42, 0) 20%, 
+                rgba(42, 42, 42, 0) 80%, 
+                rgba(42, 42, 42, 0.8) 100%);
+        }
+
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+            min-width: 100px;
+            border: 1px solid #444;
+        }
+
+        .play-button {
+            background: linear-gradient(45deg, #00ff9d, #00ccff);
+            border: none;
+        }
+
+        .play-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(0, 255, 157, 0.3);
+        }
+
+        .play-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .effects {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .effect-button {
+            background: #333;
+            font-size: 0.8em;
+            padding: 10px 20px;
+        }
+
+        .effect-button.active {
+            background: linear-gradient(45deg, #00ff9d, #00ccff);
+            border: none;
+        }
+
+        .loading {
+            display: none;
+            color: #00ff9d;
+            margin-left: 10px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        .drag-instruction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ff9d;
+            font-size: 1.2em;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .track.drag-over .drag-instruction {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Virtual DJ Mixer</h1>
+        
+        <div class="track" id="track-1">
+            <h3>Track 1</h3>
+            <div class="drag-instruction">Drop audio file here</div>
+            <div class="file-upload">
+                <input type="file" id="file-1" accept="audio/*">
+                <label for="file-1">Choose Audio File</label>
+                <span class="file-name" id="filename-1">No file selected</span>
+                <span class="loading" id="loading-1">Loading...</span>
+            </div>
+            <div class="controls">
+                <button class="play-button" id="play-1" disabled>Play</button>
+                <div class="slider-container">
+                    <label>Volume</label>
+                    <input type="range" min="0" max="100" value="75" class="slider" id="volume-1">
+                </div>
+                <div class="slider-container">
+                    <label>Speed</label>
+                    <input type="range" min="50" max="150" value="100" class="slider" id="speed-1">
+                </div>
+            </div>
+            <div class="visualizer-container">
+                <canvas class="visualizer-canvas" id="visualizer-1"></canvas>
+                <div class="visualizer-overlay"></div>
+            </div>
+            <div class="effects">
+                <button class="effect-button" data-effect="reverb">Reverb</button>
+                <button class="effect-button" data-effect="delay">Delay</button>
+                <button class="effect-button" data-effect="distortion">Distortion</button>
+            </div>
+        </div>
+
+        <div class="track" id="track-2">
+            <h3>Track 2</h3>
+            <div class="drag-instruction">Drop audio file here</div>
+            <div class="file-upload">
+                <input type="file" id="file-2" accept="audio/*">
+                <label for="file-2">Choose Audio File</label>
+                <span class="file-name" id="filename-2">No file selected</span>
+                <span class="loading" id="loading-2">Loading...</span>
+            </div>
+            <div class="controls">
+                <button class="play-button" id="play-2" disabled>Play</button>
+                <div class="slider-container">
+                    <label>Volume</label>
+                    <input type="range" min="0" max="100" value="75" class="slider" id="volume-2">
+                </div>
+                <div class="slider-container">
+                    <label>Speed</label>
+                    <input type="range" min="50" max="150" value="100" class="slider" id="speed-2">
+                </div>
+            </div>
+            <div class="visualizer-container">
+                <canvas class="visualizer-canvas" id="visualizer-2"></canvas>
+                <div class="visualizer-overlay"></div>
+            </div>
+            <div class="effects">
+                <button class="effect-button" data-effect="reverb">Reverb</button>
+                <button class="effect-button" data-effect="delay">Delay</button>
+                <button class="effect-button" data-effect="distortion">Distortion</button>
+            </div>
+        </div>
+
+        <div class="track" id="track-3">
+            <h3>Track 3</h3>
+            <div class="drag-instruction">Drop audio file here</div>
+            <div class="file-upload">
+                <input type="file" id="file-3" accept="audio/*">
+                <label for="file-3">Choose Audio File</label>
+                <span class="file-name" id="filename-3">No file selected</span>
+                <span class="loading" id="loading-3">Loading...</span>
+            </div>
+            <div class="controls">
+                <button class="play-button" id="play-3" disabled>Play</button>
+                <div class="slider-container">
+                    <label>Volume</label>
+                    <input type="range" min="0" max="100" value="75" class="slider" id="volume-3">
+                </div>
+                <div class="slider-container">
+                    <label>Speed</label>
+                    <input type="range" min="50" max="150" value="100" class="slider" id="speed-3">
+                </div>
+            </div>
+            <div class="visualizer-container">
+                <canvas class="visualizer-canvas" id="visualizer-3"></canvas>
+                <div class="visualizer-overlay"></div>
+            </div>
+            <div class="effects">
+                <button class="effect-button" data-effect="reverb">Reverb</button>
+                <button class="effect-button" data-effect="delay">Delay</button>
+                <button class="effect-button" data-effect="distortion">Distortion</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    class Track {
+    constructor(index) {
+        this.index = index;
+        this.isPlaying = false;
+        
+        // Tone.js audio components
+        this.player = new Tone.Player();
+        this.analyzer = new Tone.Analyser('waveform', 256);
+        this.reverb = new Tone.Reverb(1.5);
+        this.delay = new Tone.FeedbackDelay("8n", 0.5);
+        this.distortion = new Tone.Distortion(0.8);
+
+        // Audio chain setup
+        this.player.connect(this.analyzer);
+        this.player.chain(this.reverb, this.delay, this.distortion, Tone.Destination);
+
+        // Disable effects by default
+        this.reverb.wet.value = 0;
+        this.delay.wet.value = 0;
+        this.distortion.wet.value = 0;
+
+        // Get UI elements
+        this.elements = {
+            track: document.getElementById(`track-${index}`),
+            fileInput: document.getElementById(`file-${index}`),
+            fileName: document.getElementById(`filename-${index}`),
+            loading: document.getElementById(`loading-${index}`),
+            playButton: document.getElementById(`play-${index}`),
+            volumeSlider: document.getElementById(`volume-${index}`),
+            speedSlider: document.getElementById(`speed-${index}`),
+            canvas: document.getElementById(`visualizer-${index}`)
+        };
+
+        this.setupEventListeners();
+        this.setupVisualizer();
+        this.setupDragAndDrop();
+        this.setupEffects();
+    }
+
+    async handleFile(file) {
+        // Show loading state
+        this.elements.loading.style.display = 'inline-block';
+        this.elements.fileName.textContent = file.name;
+        
+        try {
+            // Use Tone.js Player to load audio file
+            await this.player.load(URL.createObjectURL(file));
+            
+            // Enable play button
+            this.elements.playButton.disabled = false;
+            
+            // Hide loading state
+            this.elements.loading.style.display = 'none';
+        } catch (error) {
+            console.error('Error loading audio file:', error);
+            this.elements.fileName.textContent = 'Error loading file';
+            this.elements.loading.style.display = 'none';
+        }
+    }
+
+    togglePlay() {
+        if (this.player.loaded) {
+            if (this.isPlaying) {
+                this.player.stop();
+                this.elements.playButton.textContent = 'Play';
+            } else {
+                this.player.start();
+                this.elements.playButton.textContent = 'Pause';
+                
+                // Start visualization
+                this.animate();
+            }
+            this.isPlaying = !this.isPlaying;
+        }
+    }
+
+    setupEventListeners() {
+        // File input change handler
+        this.elements.fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.handleFile(file);
+            }
+        });
+
+        // Play button handler
+        this.elements.playButton.addEventListener('click', () => {
+            this.togglePlay();
+        });
+
+        // Volume slider handler
+        this.elements.volumeSlider.addEventListener('input', (e) => {
+            const volume = parseFloat(e.target.value);
+            this.player.volume.value = Tone.gainToDb(volume / 100);
+        });
+
+        // Speed slider handler
+        this.elements.speedSlider.addEventListener('input', (e) => {
+            const speed = parseFloat(e.target.value) / 100;
+            this.player.playbackRate = speed;
+        });
+    }
+
+    setupVisualizer() {
+        const canvas = this.elements.canvas;
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+    }
+
+    animate() {
+        if (!this.isPlaying) return;
+
+        const canvas = this.elements.canvas;
+        const canvasCtx = canvas.getContext('2d');
+        const dataArray = this.analyzer.getValue();
+
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        canvasCtx.lineWidth = 2;
+        canvasCtx.strokeStyle = '#00ff9d';
+        canvasCtx.beginPath();
+
+        const sliceWidth = canvas.width * 1.0 / dataArray.length;
+        let x = 0;
+
+        for (let i = 0; i < dataArray.length; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = v * canvas.height / 2;
+
+            if (i === 0) {
+                canvasCtx.moveTo(x, y);
+            } else {
+                canvasCtx.lineTo(x, y);
+            }
+
+            x += sliceWidth;
+        }
+
+        canvasCtx.lineTo(canvas.width, canvas.height / 2);
+        canvasCtx.stroke();
+
+        requestAnimationFrame(() => this.animate());
+    }
+
+    setupDragAndDrop() {
+        const track = this.elements.track;
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            track.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                track.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            track.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                track.classList.remove('drag-over');
+            });
+        });
+
+        track.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('audio/')) {
+                this.elements.fileInput.files = e.dataTransfer.files;
+                this.handleFile(file);
+            }
+        });
+    }
+
+    setupEffects() {
+        const effectButtons = this.elements.track.querySelectorAll('.effect-button');
+        
+        effectButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const effect = button.dataset.effect;
+                this.toggleEffect(effect);
+                button.classList.toggle('active');
+            });
+        });
+    }
+
+    toggleEffect(effect) {
+        this.effects[effect] = !this.effects[effect];
+        
+        switch(effect) {
+            case 'reverb':
+                this.reverb.wet.value = this.effects[effect] ? 1 : 0;
+                break;
+            case 'delay':
+                this.delay.wet.value = this.effects[effect] ? 1 : 0;
+                break;
+            case 'distortion':
+                this.distortion.wet.value = this.effects[effect] ? 1 : 0;
+                break;
+        }
+    }
+}
+
+// Initialize tracks
+const tracks = [1, 2, 3].map(index => new Track(index));
